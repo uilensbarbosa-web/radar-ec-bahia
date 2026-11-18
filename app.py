@@ -62,8 +62,35 @@ def buscar_fonte(args):
         "feirão", "dívida", "saf", "aporte", "ronaldinho"
     ]
     try:
-        html_pag = baixar(url)
-        candidatos = re.findall(r'<a[^>]+href=["\']([^"\'#]+)["\'][^>]*>(.*?)</a>', html_pag, flags=re.DOTALL | re.IGNORECASE)
+        conteudo = baixar(url)
+        
+        # 1. Se for feed RSS (Google News), extrai os <item> XML
+        if "<item>" in conteudo:
+            for item in re.findall(r"<item>(.*?)</item>", conteudo, flags=re.DOTALL):
+                tm = re.findall(r"<title>(.*?)</title>", item, flags=re.DOTALL)
+                lm = re.findall(r"<link>(.*?)</link>", item, flags=re.DOTALL)
+                titulo_raw = limpar(next(iter(tm), ""))
+                link_full = limpar(next(iter(lm), "#"))
+                
+                fonte_item = nome_fonte
+                if " - " in titulo_raw:
+                    partes = titulo_raw.split(" - ")
+                    fonte_item = partes.pop()
+                    titulo_raw = " - ".join(partes)
+                    
+                low = titulo_raw.lower()
+                if any(i in low for i in identidade) and any(a in low for a in acoes) and not any(b in low for b in bloqueios):
+                    encontrados.append({
+                        "titulo": titulo_raw,
+                        "fonte": fonte_item,
+                        "data": "Nov/2026",
+                        "ordem": 20261118,
+                        "link": link_full
+                    })
+            return encontrados
+
+        # 2. Se for pagina HTML normal
+        candidatos = re.findall(r'<a[^>]+href=["\']([^"\'#]+)["\'][^>]*>(.*?)</a>', conteudo, flags=re.DOTALL | re.IGNORECASE)
         for href, texto in candidatos:
             if href.startswith("javascript") or href.startswith("mailto"):
                 continue
@@ -112,15 +139,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(CACHE_DADOS.encode("utf-8"))
             return
 
-        portais = [
-            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola", "https://ecbahia.com"),
-            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola/page/2", "https://ecbahia.com"),
+                portais = [
+            # Setoristas e perfis específicos do Bahia no X
+            ("X • Setoristas Tricolores", "https://google.com", ""),
+            ("X • Venê & Mercado BA", "https://google.com", ""),
+            ("X • Busca Geral Bahia", "https://google.com", ""),
+
+            # Portais e Google News tradicional
+            ("Google News Bahia", "https://google.com", ""),
+            ("Google News Esquadrão", "https://google.com", ""),
+            ("ECBahia.com", "https://ecbahia.com", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/page/2", "https://ecbahia.com"),
             ("ECBahia Base", "https://ecbahia.com/base", "https://ecbahia.com"),
             ("Bahia Notícias", "https://bahianoticias.com.br", "https://bahianoticias.com.br"),
             ("Info Bahêa", "https://infobahea.com", "https://infobahea.com"),
             ("NE45 Bahia", "https://ne45.com.br", "https://ne45.com.br"),
-            ("GE Bahia", "https://globo.com/", "https://globo.com")
+            ("GE Bahia", "https://globo.com", "https://globo.com")
         ]
+
 
         vistos = set()
         lista_final = []
