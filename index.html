@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar EC Bahia - Mercado Tricolor</title>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <div class="top-bar">
+        <div style="display: flex; align-items: center; gap: 14px;">
+            <img src="https://i.ibb.co/P3wjSMc/Escudo-Bahia-848x1024.webp" alt="Escudo EC Bahia" style="height: 48px; width: auto; object-fit: contain;">
+            <div>
+                <h1 style="line-height: 1.1;">Radar <span style="color: #38bdf8;">EC Bahia</span></h1>
+                <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 4px; font-weight: 500;">Tudo sobre o vai e vem do Esquadrão no mercado da bola 🔵🔴⚪</p>
+            </div>
+        </div>
+        <div class="controls-top">
+            <input type="text" id="searchInput" placeholder="Buscar jogador, setorista ou portal...">
+            <button class="btn-refresh" style="background: #005ca9;" onclick="buscarNoticiasBahia()">🔄 Atualizar Web</button>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="filter-group" id="typeFilters">
+            <button class="filter-btn active" data-tipo="TODOS">Todas as Movimentações</button>
+            <button class="filter-btn" data-tipo="CHEGADA">📥 Chegadas & Rumores</button>
+            <button class="filter-btn" data-tipo="RENOVACAO">✍️ Renovações</button>
+            <button class="filter-btn" data-tipo="SAIDA">📤 Saídas & Empréstimos</button>
+        </div>
+    </div>
+</header>
+
+<div class="status-bar" id="statusBar">Iniciando radar do Esquadrão...</div>
+<section class="cards-container" id="cardsContainer"></section>
+
+<section class="comments-section">
+    <h2>💬 Resenha da Nação Tricolor</h2>
+    <p class="comments-subtitle">Comente sobre os reforços, renovações e saídas do Esquadrão.</p>
+    
+    <form id="commentForm" class="comment-form">
+        <input type="text" id="commentAuthor" placeholder="Seu nome ou apelido (ex: Tricolor de Aço)" required maxlength="40">
+        <textarea id="commentText" rows="3" placeholder="O que achou das movimentações do Bahia?" required maxlength="300"></textarea>
+        <button type="submit" class="btn-comment">Publicar Comentário</button>
+    </form>
+
+    <div id="commentsList" class="comments-list"></div>
+</section>
+
+<footer class="site-footer">
+    <div class="footer-stripes">
+        <span style="background: #005ca9;"></span>
+        <span style="background: #ffffff;"></span>
+        <span style="background: #d93829;"></span>
+    </div>
+    <p><strong>2026 Radar EC Bahia</strong> • Tudo sobre o vai e vem do Esquadrão</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
