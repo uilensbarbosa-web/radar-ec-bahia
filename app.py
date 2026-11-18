@@ -19,9 +19,9 @@ ctx.verify_mode = ssl.CERT_NONE
 def baixar(url):
     req = urllib.request.Request(url, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Accept": "application/rss+xml, application/xml, text/html;q=0.9,*/*;q=0.8"
     })
-    with urllib.request.urlopen(req, timeout=5, context=ctx) as resp:
+    with urllib.request.urlopen(req, timeout=6, context=ctx) as resp:
         dados = resp.read()
         try:
             return dados.decode("utf-8")
@@ -29,6 +29,7 @@ def baixar(url):
             return dados.decode("latin-1", errors="ignore")
 
 def limpar(t):
+    t = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", t, flags=re.DOTALL)
     t = re.sub(r"<[^>]+>", " ", t)
     t = html.unescape(t).replace('"', "'").replace("\n", " ")
     return re.sub(r"\s+", " ", t).strip()
@@ -63,21 +64,20 @@ def buscar_fonte(args):
     ]
     try:
         conteudo = baixar(url)
-        
-        # 1. Se for feed RSS (Google News), extrai os <item> XML
+
         if "<item>" in conteudo:
             for item in re.findall(r"<item>(.*?)</item>", conteudo, flags=re.DOTALL):
                 tm = re.findall(r"<title>(.*?)</title>", item, flags=re.DOTALL)
                 lm = re.findall(r"<link>(.*?)</link>", item, flags=re.DOTALL)
                 titulo_raw = limpar(next(iter(tm), ""))
                 link_full = limpar(next(iter(lm), "#"))
-                
+
                 fonte_item = nome_fonte
                 if " - " in titulo_raw:
                     partes = titulo_raw.split(" - ")
                     fonte_item = partes.pop()
                     titulo_raw = " - ".join(partes)
-                    
+
                 low = titulo_raw.lower()
                 if any(i in low for i in identidade) and any(a in low for a in acoes) and not any(b in low for b in bloqueios):
                     encontrados.append({
@@ -89,7 +89,6 @@ def buscar_fonte(args):
                     })
             return encontrados
 
-        # 2. Se for pagina HTML normal
         candidatos = re.findall(r'<a[^>]+href=["\']([^"\'#]+)["\'][^>]*>(.*?)</a>', conteudo, flags=re.DOTALL | re.IGNORECASE)
         for href, texto in candidatos:
             if href.startswith("javascript") or href.startswith("mailto"):
@@ -139,29 +138,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(CACHE_DADOS.encode("utf-8"))
             return
 
-                portais = [
-            # Setoristas e perfis específicos do Bahia no X
+        portais = [
             ("X • Setoristas Tricolores", "https://google.com", ""),
             ("X • Venê & Mercado BA", "https://google.com", ""),
             ("X • Busca Geral Bahia", "https://google.com", ""),
-
-            # Portais e Google News tradicional
             ("Google News Bahia", "https://google.com", ""),
             ("Google News Esquadrão", "https://google.com", ""),
-            ("ECBahia.com", "https://ecbahia.com", "https://ecbahia.com"),
-            ("ECBahia.com", "https://ecbahia.com/page/2", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola/page/2", "https://ecbahia.com"),
             ("ECBahia Base", "https://ecbahia.com/base", "https://ecbahia.com"),
             ("Bahia Notícias", "https://bahianoticias.com.br", "https://bahianoticias.com.br"),
             ("Info Bahêa", "https://infobahea.com", "https://infobahea.com"),
             ("NE45 Bahia", "https://ne45.com.br", "https://ne45.com.br"),
-            ("GE Bahia", "https://globo.com", "https://globo.com")
+            ("GE Bahia", "https://globo.com/", "https://globo.com")
         ]
-
 
         vistos = set()
         lista_final = []
 
-        with ThreadPoolExecutor(max_workers=7) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             resultados = executor.map(buscar_fonte, portais)
             for grupo in resultados:
                 for item in grupo:
@@ -183,13 +178,3 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             d = x["data"].replace('"', "'")
             l = x["link"].replace('"', "'")
             o = x["ordem"]
-            itens_json.append(f'{{"titulo":"{t}","fonte":"{f}","data":"{d}","ordem":{o},"link":"{l}"}}')
-
-        CACHE_DADOS = "[" + ",".join(itens_json) + "]"
-        CACHE_TEMPO = time.time()
-        self.wfile.write(CACHE_DADOS.encode("utf-8"))
-
-socketserver.TCPServer.allow_reuse_address = True
-print(f"Radar EC Bahia ativo na porta {PORT}", flush=True)
-with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
-    httpd.serve_forever()
