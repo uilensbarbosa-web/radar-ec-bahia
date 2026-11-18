@@ -2,6 +2,7 @@ import os
 import http.server
 import socketserver
 import urllib.request
+import urllib.parse
 import re
 import html
 import ssl
@@ -18,7 +19,7 @@ ctx.verify_mode = ssl.CERT_NONE
 
 def baixar(url):
     req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/rss+xml, application/xml, text/html;q=0.9,*/*;q=0.8"
     })
     with urllib.request.urlopen(req, timeout=6, context=ctx) as resp:
@@ -33,7 +34,6 @@ def limpar(t):
     t = re.sub(r"<[^>]+>", " ", t)
     t = html.unescape(t).replace('"', "'").replace("\n", " ")
     return re.sub(r"\s+", " ", t).strip()
-
 HISTORICO_TEMPORADA = [
     {"titulo": "Bahia estende vínculo contratual de titulares do elenco principal até 2028", "fonte": "GE Bahia", "data": "Out/2026", "ordem": 20261015, "link": "https://globo.com"},
     {"titulo": "Bahia renova contrato de joias da base dos Pivetes de Aço com multa milionária", "fonte": "EC Bahia Oficial", "data": "Set/2026", "ordem": 20260920, "link": "https://ecbahia.com"},
@@ -123,6 +123,9 @@ def buscar_fonte(args):
         pass
     return encontrados
 
+def gnews(query):
+    return f"https://google.com{urllib.parse.quote(query)}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         global CACHE_DADOS, CACHE_TEMPO
@@ -139,11 +142,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         portais = [
-            ("X • Setoristas Tricolores", "https://google.com", ""),
-            ("X • Venê & Mercado BA", "https://google.com", ""),
-            ("X • Busca Geral Bahia", "https://google.com", ""),
-            ("Google News Bahia", "https://google.com", ""),
-            ("Google News Esquadrão", "https://google.com", ""),
+            ("X • Setoristas Tricolores", gnews("site:x.com (darinosena OR yurisantana OR ulissesgama OR barabahea OR Marinhojrpuco) bahia"), ""),
+            ("X • Venê & Mercado BA", gnews("site:x.com venecasagrande bahia (contratação OR interesse OR negocia OR proposta OR empréstimo)"), ""),
+            ("X • Busca Geral Bahia", gnews("site:x.com bahia (contratação OR interesse OR negocia OR renovação OR empréstimo)"), ""),
+            ("Google News Bahia", gnews("bahia contratação OR reforço OR negocia futebol"), ""),
+            ("Google News Esquadrão", gnews('"ec bahia" OR "esquadrão" mercado jogador'), ""),
             ("ECBahia.com", "https://ecbahia.com/mercado-da-bola", "https://ecbahia.com"),
             ("ECBahia.com", "https://ecbahia.com/mercado-da-bola/page/2", "https://ecbahia.com"),
             ("ECBahia Base", "https://ecbahia.com/base", "https://ecbahia.com"),
@@ -178,3 +181,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             d = x["data"].replace('"', "'")
             l = x["link"].replace('"', "'")
             o = x["ordem"]
+            itens_json.append(f'{{"titulo":"{t}","fonte":"{f}","data":"{d}","ordem":{o},"link":"{l}"}}')
+
+        CACHE_DADOS = "[" + ",".join(itens_json) + "]"
+        CACHE_TEMPO = time.time()
+        self.wfile.write(CACHE_DADOS.encode("utf-8"))
+
+socketserver.TCPServer.allow_reuse_address = True
+print(f"Radar EC Bahia ativo na porta {PORT}", flush=True)
+with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
+    httpd.serve_forever()
