@@ -1,4 +1,5 @@
 import os
+import json
 import http.server
 import socketserver
 import urllib.request
@@ -7,9 +8,11 @@ import re
 import html
 import ssl
 import time
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 PORT = int(os.environ.get("PORT", 8090))
+ARQUIVO_DADOS = "dados_comunidade.json"
 CACHE_DADOS = None
 CACHE_TEMPO = 0
 
@@ -17,12 +20,33 @@ ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
 
+def carregar_comunidade():
+    if os.path.exists(ARQUIVO_DADOS):
+        try:
+            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "comentarios": [
+            {"autor": "Bora Bahêa", "data": "Nov/2026", "texto": "Alejo Véliz e Marco Moreno elevaram muito o nível do elenco em 2026! Agora é aguardar esse atacante da Premier League."}
+        ],
+        "reacoes": {}
+    }
+
+def salvar_comunidade(dados):
+    try:
+        with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 def baixar(url):
     req = urllib.request.Request(url, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/rss+xml, application/xml, text/html;q=0.9,*/*;q=0.8"
     })
-    with urllib.request.urlopen(req, timeout=6, context=ctx) as resp:
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
         dados = resp.read()
         try:
             return dados.decode("utf-8")
@@ -125,19 +149,28 @@ def buscar_fonte(args):
 
 def bing_news(query):
     return f"https://bing.com{urllib.parse.quote(query)}&format=rss&mkt=pt-BR"
-
 class Handler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        global CACHE_DADOS, CACHE_TEMPO
-        if self.path != "/api/noticias":
-            return super().do_GET()
-
+    def enviar_json(self, objeto):
         self.send_response(200)
         self.send_header("Content-type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
+        self.wfile.write(json.dumps(objeto, ensure_ascii=False).encode("utf-8"))
+
+    def do_GET(self):
+        global CACHE_DADOS, CACHE_TEMPO
+        if self.path == "/api/comunidade":
+            self.enviar_json(carregar_comunidade())
+            return
+
+        if self.path != "/api/noticias":
+            return super().do_GET()
 
         if CACHE_DADOS and (time.time() - CACHE_TEMPO < 600):
+            self.send_response(200)
+            self.send_header("Content-type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
             self.wfile.write(CACHE_DADOS.encode("utf-8"))
             return
 
@@ -173,19 +206,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 lista_final.append(hist)
 
         lista_final.sort(key=lambda x: x["ordem"], reverse=True)
-
-        itens_json = []
-        for x in lista_final:
-            t = x["titulo"].replace('"', "'")
-            f = x["fonte"].replace('"', "'")
-            d = x["data"].replace('"', "'")
-            l = x["link"].replace('"', "'")
-            o = x["ordem"]
-            itens_json.append(f'{{"titulo":"{t}","fonte":"{f}","data":"{d}","ordem":{o},"link":"{l}"}}')
-
-        CACHE_DADOS = "[" + ",".join(itens_json) + "]"
+        CACHE_DADOS = json.dumps(lista_final, ensure_ascii=False)
         CACHE_TEMPO = time.time()
+
+        self.send_response(200)
+        self.send_header("Content-type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
         self.wfile.write(CACHE_DADOS.encode("utf-8"))
+
+    def do_POST(self):
+        tamanho = int(self.headers.get("Content-Length", 0))
+        corpo = self.rfile.read(tamanho).decode("utf-8")
+        payload = json.loads(corpo) if corpo else {}
+        dados = carregar_comunidade()
+
+        if self.path == "/api/comentarios":
+            autor = limpar(payload.get("autor", ""))[:40]
+            texto = limpar(payload.get("texto", ""))[:300]
+            if autor and texto:
+                agora = datetime.now().strftime("%d/%m %H:%M")
+                dados["comentarios"].insert(0, {"autor": autor, "data": agora, "texto": texto})
+                dados["comentarios"] = dados["comentarios"][:50]
+                salvar_comunidade(dados)
+            self.enviar_json(dados["comentarios"])
+            return
+
+        if self.path == "/api/reacoes":
+            chave = payload.get("titulo", "")[:100]
+            tipo = payload.get("tipo", "")
+            if chave and tipo in ["like", "dislike"]:
+                if chave not in dados["reacoes"]:
+                    dados["reacoes"][chave] = {"like": 0, "dislike": 0}
+                dados["reacoes"][chave][tipo] += 1
+                salvar_comunidade(dados)
+            self.enviar_json(dados["reacoes"])
+            return
 
 socketserver.TCPServer.allow_reuse_address = True
 print(f"Radar EC Bahia ativo na porta {PORT}", flush=True)
