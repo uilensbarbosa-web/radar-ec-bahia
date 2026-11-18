@@ -1,3 +1,4 @@
+import os
 import http.server
 import socketserver
 import urllib.request
@@ -7,7 +8,7 @@ import ssl
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-PORT = 8090
+PORT = int(os.environ.get("PORT", 8090))
 CACHE_DADOS = None
 CACHE_TEMPO = 0
 
@@ -31,6 +32,7 @@ def limpar(t):
     t = re.sub(r"<[^>]+>", " ", t)
     t = html.unescape(t).replace('"', "'").replace("\n", " ")
     return re.sub(r"\s+", " ", t).strip()
+
 HISTORICO_TEMPORADA = [
     {"titulo": "Bahia estende vínculo contratual de titulares do elenco principal até 2028", "fonte": "GE Bahia", "data": "Out/2026", "ordem": 20261015, "link": "https://globo.com"},
     {"titulo": "Bahia renova contrato de joias da base dos Pivetes de Aço com multa milionária", "fonte": "EC Bahia Oficial", "data": "Set/2026", "ordem": 20260920, "link": "https://ecbahia.com"},
@@ -66,6 +68,9 @@ def buscar_fonte(args):
             if href.startswith("javascript") or href.startswith("mailto"):
                 continue
             link_full = href if href.startswith("http") else dominio + ("" if href.startswith("/") else "/") + href
+            if link_full.rstrip("/") in ["https://ecbahia.com", "https://ecbahia.com/mercado-da-bola", "https://globo.com"]:
+                continue
+
             titulo = re.sub(r"^\d+\s+", "", limpar(texto))
             if len(titulo) < 26 or len(titulo) > 160:
                 continue
@@ -108,13 +113,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         portais = [
-            ("ECBahia.com", "https://ecbahia.com", "https://ecbahia.com"),
-            ("ECBahia.com", "https://ecbahia.com/page/2", "https://ecbahia.com"),
-            ("ECBahia Base", "https://ecbahia.com", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola/page/2", "https://ecbahia.com"),
+            ("ECBahia Base", "https://ecbahia.com/base", "https://ecbahia.com"),
             ("Bahia Notícias", "https://bahianoticias.com.br", "https://bahianoticias.com.br"),
             ("Info Bahêa", "https://infobahea.com", "https://infobahea.com"),
             ("NE45 Bahia", "https://ne45.com.br", "https://ne45.com.br"),
-            ("GE Bahia", "https://globo.com", "https://globo.com")
+            ("GE Bahia", "https://globo.com/", "https://globo.com")
         ]
 
         vistos = set()
@@ -148,6 +153,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         CACHE_TEMPO = time.time()
         self.wfile.write(CACHE_DADOS.encode("utf-8"))
 
-import os
-PORT = int(os.environ.get("PORT", 8090))
-
+socketserver.TCPServer.allow_reuse_address = True
+print(f"Radar EC Bahia ativo na porta {PORT}", flush=True)
+with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
+    httpd.serve_forever()
