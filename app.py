@@ -123,8 +123,8 @@ def buscar_fonte(args):
         pass
     return encontrados
 
-def gnews(query):
-    return f"https://google.com{urllib.parse.quote(query)}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+def bing_news(query):
+    return f"https://bing.com{urllib.parse.quote(query)}&format=rss&mkt=pt-BR"
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -142,18 +142,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         portais = [
-            ("X • Setoristas Tricolores", gnews("site:x.com (darinosena OR yurisantana OR ulissesgama OR barabahea OR Marinhojrpuco) bahia"), ""),
-            ("X • Venê & Mercado BA", gnews("site:x.com venecasagrande bahia (contratação OR interesse OR negocia OR proposta OR empréstimo)"), ""),
-            ("X • Busca Geral Bahia", gnews("site:x.com bahia (contratação OR interesse OR negocia OR renovação OR empréstimo)"), ""),
-            ("Google News Bahia", gnews("bahia contratação OR reforço OR negocia futebol"), ""),
-            ("Google News Esquadrão", gnews('"ec bahia" OR "esquadrão" mercado jogador'), ""),
-            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola", "https://ecbahia.com"),
-            ("ECBahia.com", "https://ecbahia.com/mercado-da-bola/page/2", "https://ecbahia.com"),
+            ("X • Setoristas Tricolores", bing_news("site:x.com (darinosena OR yurisantana OR ulissesgama OR barabahea OR Marinhojrpuco) bahia"), ""),
+            ("X • Venê & Mercado BA", bing_news("site:x.com venecasagrande bahia (contratação OR interesse OR negocia OR proposta OR empréstimo)"), ""),
+            ("X • Busca Geral Bahia", bing_news("site:x.com bahia (contratação OR interesse OR negocia OR renovação OR empréstimo)"), ""),
+            ("Notícias Mercado Bahia", bing_news("esporte clube bahia contratação OR reforço OR negocia OR sondagem"), ""),
+            ("Notícias Esquadrão", bing_news("ec bahia mercado da bola jogador proposta"), ""),
+            ("ECBahia.com", "https://ecbahia.com", "https://ecbahia.com"),
+            ("ECBahia.com", "https://ecbahia.com/page/2", "https://ecbahia.com"),
             ("ECBahia Base", "https://ecbahia.com/base", "https://ecbahia.com"),
             ("Bahia Notícias", "https://bahianoticias.com.br", "https://bahianoticias.com.br"),
             ("Info Bahêa", "https://infobahea.com", "https://infobahea.com"),
             ("NE45 Bahia", "https://ne45.com.br", "https://ne45.com.br"),
-            ("GE Bahia", "https://globo.com/", "https://globo.com")
+            ("GE Bahia", "https://globo.com", "https://globo.com")
         ]
 
         vistos = set()
