@@ -1,178 +1,158 @@
-const ESCUDO_OFICIAL = "https://i.ibb.co/P3wjSMc/Escudo-Bahia-848x1024.webp";
+let todasNoticias = [];
 
-let movimentacoesBahia = [];
-let filtroTipo = "TODOS";
-let termoBusca = "";
-
-const container = document.getElementById("cardsContainer");
-const statusBar = document.getElementById("statusBar");
-
-function criarEscudoCirculo() {
-    return `<div style="width:44px; height:44px; border-radius:50%; background:#ffffff; border:2px solid #ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,0.4); overflow:hidden; padding:4px;">
-        <img src="${ESCUDO_OFICIAL}" alt="EC Bahia" style="width:100%; height:100%; object-fit:contain;">
-    </div>`;
+function classificarNoticia(titulo) {
+    const t = titulo.toLowerCase();
+    if (t.includes('renova') || t.includes('estende') || t.includes('amplia contrato')) {
+        return { tipo: 'renovacao', label: '✍️ Renovação' };
+    }
+    if (t.includes('saída') || t.includes('sai') || t.includes('empresta') || t.includes('empréstimo') || t.includes('rescinde') || t.includes('vende') || t.includes('deixa o bahia')) {
+        return { tipo: 'saida', label: '📤 Saída / Empréstimo' };
+    }
+    return { tipo: 'chegada', label: '📥 Chegada / Rumor' };
 }
 
-function classificarMovimentacao(texto) {
-    const t = texto.toLowerCase();
-    if (t.includes("renova") || t.includes("renovação") || t.includes("novo contrato") || t.includes("estende") || t.includes("amplia vínculo")) {
-        return { tipo: "RENOVACAO", label: "✍️ Renovação", cor: "#1e3a8a", direcao: "IN" };
-    }
-    if (t.includes("saída") || t.includes("deixa o") || t.includes("sai do") || t.includes("rescinde") || t.includes("rescisão") || t.includes("empréstimo do") || t.includes("empresta") || t.includes("emprestado") || t.includes("vendido") || t.includes("venda") || t.includes("despede") || t.includes("dispensa")) {
-        return { tipo: "SAIDA", label: "📤 Saída / Empréstimo", cor: "#991b1b", direcao: "OUT" };
-    }
-    return { tipo: "CHEGADA", label: "📥 Chegada / Rumor", cor: "#005ca9", direcao: "IN" };
+function formatarItemNoticia(tituloOriginal, link, pubDate) {
+    const cat = classificarNoticia(tituloOriginal);
+    const dataObj = new Date(pubDate);
+    const dataFormatada = isNaN(dataObj) ? 'Recente' : dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const partesTitulo = tituloOriginal.split(' - ');
+    const fonte = partesTitulo.length > 1 ? partesTitulo.pop() : 'Portal Esportivo';
+    const tituloLimpo = partesTitulo.join(' - ');
+
+    return {
+        titulo: tituloLimpo,
+        link: link,
+        data: dataFormatada,
+        fonte: fonte,
+        tipo: cat.tipo,
+        label: cat.label
+    };
 }
 
-async function buscarNoticiasBahia() {
-    statusBar.innerText = "🔍 Carregando movimentações do Esporte Clube Bahia...";
-    container.innerHTML = "";
+async function carregarNoticias() {
+    const statusEl = document.getElementById('status');
 
     try {
-        const resp = await fetch("/api/noticias");
+        // Chama a função nativa hospedada no próprio Cloudflare Pages
+        const resposta = await fetch('/noticias');
+        if (!resposta.ok) throw new Error('Falha na resposta');
 
-        const dados = await resp.json();
+        const textoXml = await resposta.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(textoXml, "text/xml");
+        const items = xml.querySelectorAll("item");
 
-        movimentacoesBahia = dados.map((item, index) => {
-            const info = classificarMovimentacao(item.titulo);
-            return {
-                id: index + 1,
-                titulo: item.titulo,
-                fonte: item.fonte,
-                data: item.data || "2026",
-                tipo: info.tipo,
-                labelTipo: info.label,
-                corCard: info.cor,
-                direcao: info.direcao,
-                linkOriginal: item.link
-            };
-        });
+        if (items.length > 0) {
+            todasNoticias = Array.from(items).slice(0, 18).map(item => {
+                const tituloCompleto = item.querySelector("title")?.textContent || "";
+                const link = item.querySelector("link")?.textContent || "#";
+                const pubDate = item.querySelector("pubDate")?.textContent || "";
 
-        statusBar.innerText = `🔵🔴⚪ ${movimentacoesBahia.length} movimentações do Esporte Clube Bahia carregadas.`;
-        renderizarCards();
+                const cat = classificarNoticia(tituloCompleto);
+                const dataObj = new Date(pubDate);
+                const dataFormatada = isNaN(dataObj) ? "Recente" : dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                
+                const partesTitulo = tituloCompleto.split(' - ');
+                const fonte = partesTitulo.length > 1 ? partesTitulo.pop() : 'Portal Esportivo';
+                const tituloLimpo = partesTitulo.join(' - ');
+
+                return {
+                    titulo: tituloLimpo,
+                    link: link,
+                    data: dataFormatada,
+                    fonte: fonte,
+                    tipo: cat.tipo,
+                    label: cat.label
+                };
+            });
+
+            statusEl.style.display = 'none';
+            renderizarNoticias(todasNoticias);
+        } else {
+            statusEl.innerText = '⚠️ Nenhuma movimentação encontrada no momento.';
+        }
     } catch (erro) {
-        statusBar.innerText = "⚠️ Inicie o app.py da pasta RadarBahia no VS Code.";
+        statusEl.innerText = '⚠️ A busca direta requer publicação no Cloudflare Pages (não funciona no Live Server local).';
     }
 }
-function renderizarCards() {
-    container.innerHTML = "";
-    const filtrados = movimentacoesBahia.filter(item => {
-        const bateTipo = filtroTipo === "TODOS" || item.tipo === filtroTipo;
-        const bateBusca = `${item.titulo} ${item.fonte} ${item.data}`.toLowerCase().includes(termoBusca.toLowerCase());
-        return bateTipo && bateBusca;
-    });
 
-    if (filtrados.length === 0) {
-        container.innerHTML = `<p style="color:#aaa; grid-column: 1/-1; text-align:center; padding: 40px;">Nenhuma movimentação encontrada para este filtro.</p>`;
+
+function renderizarNoticias(lista) {
+    const grid = document.getElementById('grid-noticias');
+    grid.innerHTML = '';
+
+    if (lista.length === 0) {
+        grid.innerHTML = '<p style="color: #adb5bd;">Nenhuma notícia encontrada nesta categoria.</p>';
         return;
     }
 
-    const estiloCirculo = "width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:0.95rem; border:2px solid #fff; box-shadow:0 3px 8px rgba(0,0,0,0.4);";
-    const escudoCard = criarEscudoCirculo();
-
-    filtrados.forEach(item => {
-        const origem = item.direcao === "OUT"
-            ? escudoCard
-            : `<div style="${estiloCirculo} background:#0f172a; color:#fff;">⚽</div>`;
-
-        const destino = item.direcao === "OUT"
-            ? `<div style="${estiloCirculo} background:#0f172a; color:#fff;">✈️</div>`
-            : escudoCard;
-
-        const card = document.createElement("div");
-        card.className = "transfer-card";
-        card.style.backgroundColor = item.corCard;
-        card.style.color = "#FFFFFF";
+    lista.forEach(n => {
+        const card = document.createElement('div');
+        card.className = `card ${n.tipo}`;
         card.innerHTML = `
             <div>
-                <div class="card-visual-header" style="height: 92px; margin-bottom: -20px; position: relative; overflow: hidden;">
-                    <img src="${ESCUDO_OFICIAL}" alt="" style="position: absolute; right: 12px; top: -8px; height: 110px; opacity: 0.16; pointer-events: none;">
-                    <div class="club-banner-text" style="font-size: 1.4rem; position: relative; z-index: 2;">EC BAHIA</div>
-                </div>
-                <div class="transfer-flow">
-                    <div class="clubs-transition">
-                        ${origem}
-                        <span class="arrows">»»»</span>
-                        ${destino}
-                    </div>
-                    <span class="division-tag" style="font-size: 0.78rem; padding: 5px 10px; background: rgba(0,0,0,0.35);">${item.labelTipo}</span>
-                </div>
-                <div class="player-info-row" style="margin-top: 12px;">
-                    <a href="${item.linkOriginal}" target="_blank" style="color: inherit; text-decoration: none;">
-                        <div class="headline-title" style="font-size: 1.15rem; line-height: 1.4;">${item.titulo}</div>
-                    </a>
-                    <div class="source-meta" style="margin-top: 10px;">Fonte: ${item.fonte} • 📅 ${item.data}</div>
-                </div>
+                <span class="badge">${n.label}</span>
+                <h3>${n.titulo}</h3>
             </div>
-            <div class="card-footer" style="margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">
-                <a href="${item.linkOriginal}" target="_blank" class="btn-saiba-mais" style="text-decoration: none;">
-                    Ler notícia completa ↗
-                </a>
-                <div class="reaction-buttons">
-                    <button class="react-btn react-dislike" onclick="reagir(this)" title="Não curti">👎</button>
-                    <button class="react-btn react-like" onclick="reagir(this)" title="Curti">👍</button>
-                </div>
+            <div class="card-footer">
+                <span>📰 ${n.fonte} • ${n.data}</span>
+                <a href="${n.link}" target="_blank" rel="noopener noreferrer">Ler matéria ↗</a>
             </div>
         `;
-        container.appendChild(card);
+        grid.appendChild(card);
     });
 }
 
-document.querySelectorAll("#typeFilters .filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-        document.querySelectorAll("#typeFilters .filter-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        filtroTipo = btn.dataset.tipo;
-        renderizarCards();
-    });
-});
+function filtrar(categoria, botao) {
+    document.querySelectorAll('.filtros button').forEach(b => b.classList.remove('ativo'));
+    botao.classList.add('ativo');
 
-document.getElementById("searchInput").addEventListener("input", e => {
-    termoBusca = e.target.value;
-    renderizarCards();
-});
-
-function reagir(btn) {
-    btn.style.transform = "scale(1.25)";
-    setTimeout(() => btn.style.transform = "scale(1)", 200);
+    if (categoria === 'todas') {
+        renderizarNoticias(todasNoticias);
+    } else {
+        renderizarNoticias(todasNoticias.filter(n => n.tipo === categoria));
+    }
 }
 
-const commentForm = document.getElementById("commentForm");
-const commentsList = document.getElementById("commentsList");
+function carregarComentarios() {
+    const salvos = JSON.parse(localStorage.getItem('radar_bahia_comentarios')) || [
+        { nome: 'Bora Bahêa', texto: 'Bora Esquadrão! Acompanhando todas as movimentações da janela.', data: 'Hoje' }
+    ];
+    const lista = document.getElementById('lista-comentarios');
+    lista.innerHTML = '';
 
-let comentarios = JSON.parse(localStorage.getItem("comentarios_bahia")) || [
-    { autor: "Bora Bahêa", data: "Hoje", texto: "Alejo Véliz e Marco Moreno elevaram muito o nível do elenco em 2026! Agora é aguardar esse atacante da Premier League." }
-];
-
-function renderizarComentarios() {
-    commentsList.innerHTML = "";
-    comentarios.forEach(c => {
-        const div = document.createElement("div");
-        div.className = "comment-item";
-        div.innerHTML = `
-            <div class="comment-header">
-                <strong>${c.autor}</strong>
+    salvos.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'comentario-item';
+        item.innerHTML = `
+            <div class="comentario-topo">
+                <strong>${c.nome}</strong>
                 <span>${c.data}</span>
             </div>
-            <div class="comment-body">${c.texto}</div>
+            <p>${c.texto}</p>
         `;
-        commentsList.appendChild(div);
+        lista.appendChild(item);
     });
 }
 
-commentForm.addEventListener("submit", e => {
-    e.preventDefault();
-    const autor = document.getElementById("commentAuthor").value.trim();
-    const texto = document.getElementById("commentText").value.trim();
-    if (!autor || !texto) return;
+function adicionarComentario() {
+    const nomeInput = document.getElementById('nome-usuario');
+    const textoInput = document.getElementById('texto-comentario');
+    const nome = nomeInput.value.trim() || 'Torcedor Tricolor';
+    const texto = textoInput.value.trim();
 
-    const agora = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    comentarios.unshift({ autor, data: agora, texto });
-    localStorage.setItem("comentarios_bahia", JSON.stringify(comentarios));
+    if (!texto) return alert('Escreva um comentário antes de publicar!');
 
-    document.getElementById("commentText").value = "";
-    renderizarComentarios();
-});
+    const salvos = JSON.parse(localStorage.getItem('radar_bahia_comentarios')) || [];
+    const agora = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-renderizarComentarios();
-buscarNoticiasBahia();
+    salvos.unshift({ nome, texto, data: agora });
+    localStorage.setItem('radar_bahia_comentarios', JSON.stringify(salvos));
+
+    nomeInput.value = '';
+    textoInput.value = '';
+    carregarComentarios();
+}
+
+carregarNoticias();
+carregarComentarios();
